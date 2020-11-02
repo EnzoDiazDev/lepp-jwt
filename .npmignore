@@ -1,4 +1,5 @@
 src/
+node_modules/
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 .eslintrc.json
