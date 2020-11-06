@@ -2,91 +2,41 @@ import {decorators} from "@enzodiazdev/lepp";
 import {Request, Response} from "express";
 import JWT from "./utils/JWT";
 import Encrypt from "./utils/Encrypt";
+import Storage from "./utils/Storage";
+import Validate from "./utils/Validate";
+import User from "./utils/User";
 
 const {Controller, Post} = decorators;
 
 @Controller("/authentication")
 export default class Authentication {
     private jwt:JWT
+    private storage:Storage
+    private validate:Validate
 
-    constructor(_token:string){
-        this.jwt = new JWT(_token);
-    }
-
-    /**
-     * @abstract
-     */
-    public save_user(user:unknown):Promise<void> {
-        throw new Error("save_user method must be implemented");
-    }
-
-    /**
-     * @abstract
-     */
-    public get_user_by_name(username:string):Promise<unknown> {
-        throw new Error("get_user_by method must be implemented");
-    }
-
-    /**
-     * @abstract
-     */
-    public get_next_id():Promise<number> {
-        throw new Error("get_next_id method must be implemented");
-    }
-
-    private register_validation(res:Response, body:any):boolean {
-        const {username, password, repeat_password} = body;
-        if(!username || password || repeat_password) {
-            res.status(400).json({message: "you must fill all the fields"});
-            return false;
-        }
-
-        if(password.length < 6){
-            res.status(400).json({message: "The password must be longer than six characters"});
-            return false;
-        }
-
-        if(password !== repeat_password) {
-            res.status(400).json({message: "Passwords do not match"});
-            return false;
-        }
-
-        return true;
-    }
-
-    private login_validation(res:Response, body:any):boolean {
-        const {username, password} = body;
-
-        if(!username || password) {
-            res.status(400).json({message: "you must fill all the fields"});
-            return false;
-        }
-
-        if(password.length < 6){
-            res.status(400).json({message: "The password must be longer than six characters"});
-            return false;
-        }
-
-        return true;
+    constructor(storage:Storage, token:string){
+        this.validate = new Validate();
+        this.jwt = new JWT(token);
+        this.storage = storage;
     }
 
     @Post("/register")
     public async register(req:Request, res:Response):Promise<void> {
-        const is_valid = this.register_validation(res, req.body);
+        const is_valid = this.validate.register(res, req.body);
         if(!is_valid) return;
 
-        const user = await this.get_user_by_name(req.body.username);
+        const user = await this.storage.get_user_by_name(req.body.username);
         if(user) {
             res.status(409).json({message: "The username has already been taken"});
             return;
         }
 
-        const user_id = await this.get_next_id();
+        const user_id = await this.storage.get_next_id();
         const encrypted_password = await Encrypt.encrypt_password(req.body.password);
 
         const user_token = this.jwt.sign({
             id: user_id,
-            name: req.body.username,
+            username: req.body.username,
             timestamp: Date.now()
         });
 
@@ -97,35 +47,61 @@ export default class Authentication {
             token: user_token
         };
 
-        await this.save_user(new_user);
+        await this.storage.save_user(new_user);
 
-        res.status(201).json({
-            message: "The user has been created",
-            data: {
-                token: user_token
-            }
-        });
+        res.set("authorization", user_token)
+            .status(201)
+            .json({
+                message: "The user has been created",
+                data: {
+                    token: user_token
+                }
+            });
 
         return;
     }
 
     @Post("/login")
     public async login(req:Request, res:Response):Promise<void>{
-        const is_valid = this.login_validation(res, req.body);
-        if(!is_valid) return;
+        // //Check token
+        // const token = req.headers["authorization"];
+        // if(token){
+        //     const token_is_valid = this.jwt.verify(token);
+        //     if(token_is_valid){
+        //         //..
+        //     }
+        // }
+        const req_user:User = req.body;
 
-        const user = await this.get_user_by_name(req.body.username) as any;
-        if(user) {
-            const password_is_correct = Encrypt.compare_password(req.body.password, user.password);
-            if(!password_is_correct) {
-                res.status(401).json({message: "Wrong password"});
-                return;
-            }
+        const login_is_valid = this.validate.login(res, req_user);
+        if(!login_is_valid) return;
 
-
-        } else {
+        const user = await this.storage.get_user_by_name(req_user.username);
+        if(!user) {
             res.status(404).json({message: "This user does not exist"});
             return;
         }
+
+        const password_is_correct = await this.validate.password(res, req_user.password, user.password);
+        if(!password_is_correct) return;
+
+        const new_token = this.jwt.sign({
+            id: user.id,
+            username: user.username,
+            timestamp: Date.now()
+        });
+
+        await this.storage.update_user_token(user.id, new_token);
+
+        res.set("authorization", new_token)
+            .status(201)
+            .json({
+                message: "Login successful",
+                data: {
+                    token: new_token
+                }
+            });
+
+        return;
     }
 }
