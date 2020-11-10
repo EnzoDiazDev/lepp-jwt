@@ -5,7 +5,7 @@ import Encrypt from "./Encrypt";
 export default class Validate {
     public register(res:Response, body:User):boolean {
         const {username, password, repeat_password} = body;
-        if(!username || password || repeat_password) {
+        if(!username || !password || !repeat_password) {
             res.status(400).json({message: "you must fill all the fields"});
             return false;
         }
@@ -26,7 +26,7 @@ export default class Validate {
     public login(res:Response, body:User):boolean {
         const {username, password} = body;
 
-        if(!username || password) {
+        if(!username || !password) {
             res.status(400).json({message: "you must fill all the fields"});
             return false;
         }

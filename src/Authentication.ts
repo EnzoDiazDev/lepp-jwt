@@ -22,6 +22,10 @@ export default class Authentication {
 
     @Post("/register")
     public async register(req:Request, res:Response):Promise<void> {
+        if(!req.body) {
+            res.status(401).json({message: "You must send body data"});
+            return;
+        }
         const is_valid = this.validate.register(res, req.body);
         if(!is_valid) return;
 
@@ -63,6 +67,10 @@ export default class Authentication {
 
     @Post("/login")
     public async login(req:Request, res:Response):Promise<void>{
+        if(!req.body) {
+            res.status(401).json({message: "You must send body data"});
+            return;
+        }
         // //Check token
         // const token = req.headers["authorization"];
         // if(token){
