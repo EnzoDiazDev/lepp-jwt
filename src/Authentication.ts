@@ -1,4 +1,4 @@
-import {decorators} from "@enzodiazdev/lepp";
+import {decorators} from "@lottielabs/lepp";
 import {Request, Response} from "express";
 import JWT from "./utils/JWT";
 import Encrypt from "./utils/Encrypt";
